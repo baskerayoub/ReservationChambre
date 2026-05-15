@@ -1,67 +1,90 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div>
-            <div class="flex items-center gap-2 text-sm text-gray-500">
-                <a href="{{ route('chambres.index') }}" class="hover:text-blue-600 transition-colors">Rooms</a>
-                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                <span class="text-gray-900 font-medium">New Booking</span>
+@extends('layouts.app')
+@section('title', 'Book ' . $room->name)
+
+@section('content')
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <nav class="flex items-center gap-2 text-sm text-gray-400 mb-6">
+        <a href="{{ route('rooms.index') }}" class="hover:text-amber-500">Rooms</a>
+        <i class="fas fa-chevron-right text-xs"></i>
+        <a href="{{ route('rooms.show', $room) }}" class="hover:text-amber-500">{{ $room->name }}</a>
+        <i class="fas fa-chevron-right text-xs"></i>
+        <span class="text-gray-700 dark:text-gray-300">Book</span>
+    </nav>
+
+    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
+        {{-- Room Summary --}}
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 p-6 text-white">
+            <h1 class="text-2xl font-bold">Book {{ $room->name }}</h1>
+            <p class="text-white/70 mt-1">{{ ucfirst($room->type) }} · {{ $room->capacity }} guests · ${{ number_format($room->price_per_night) }}/night</p>
+        </div>
+
+        <form method="POST" action="{{ route('reservations.store') }}" class="p-6 space-y-6" x-data="bookingForm()">
+            @csrf
+            <input type="hidden" name="room_id" value="{{ $room->id }}">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Check-in Date</label>
+                    <input type="date" name="check_in" x-model="checkIn" min="{{ now()->format('Y-m-d') }}" required class="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-amber-500 focus:border-amber-500" />
+                    @error('check_in')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Check-out Date</label>
+                    <input type="date" name="check_out" x-model="checkOut" :min="checkIn || '{{ now()->addDay()->format('Y-m-d') }}'" required class="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-amber-500 focus:border-amber-500" />
+                    @error('check_out')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
             </div>
-            <h2 class="mt-1 text-xl font-bold text-gray-900">Book Your Stay</h2>
-        </div>
-    </x-slot>
 
-    <div class="py-8 animate-fade-in">
-        <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            {{-- Selected Room Preview --}}
-            @if ($selectedChambre)
-                <div class="card overflow-hidden mb-6 animate-fade-in-up">
-                    <div class="grid sm:grid-cols-[240px_1fr]">
-                        <div class="h-48 sm:h-full overflow-hidden">
-                            @if ($selectedChambre->image)
-                                <img src="{{ $selectedChambre->image }}" alt="Room {{ $selectedChambre->numero }}" class="h-full w-full object-cover">
-                            @else
-                                <div class="flex h-full items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white font-bold">
-                                    Room {{ $selectedChambre->numero }}
-                                </div>
-                            @endif
-                        </div>
-                        <div class="p-5 flex flex-col justify-center">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">Selected Room</p>
-                            <p class="mt-1 text-lg font-bold text-gray-900">
-                                Room {{ $selectedChambre->numero }} — {{ $selectedChambre->type }}
-                            </p>
-                            <p class="mt-1 text-2xl font-extrabold text-blue-700">{{ number_format($selectedChambre->prix, 2) }} MAD<span class="text-sm font-medium text-gray-400"> / night</span></p>
-                            <p class="mt-2 text-sm text-gray-500 line-clamp-2">{{ $selectedChambre->description }}</p>
-                        </div>
-                    </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Number of Guests</label>
+                <select name="guests" required class="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-amber-500 focus:border-amber-500">
+                    @for($i = 1; $i <= $room->capacity; $i++)
+                        <option value="{{ $i }}">{{ $i }} guest{{ $i > 1 ? 's' : '' }}</option>
+                    @endfor
+                </select>
+                @error('guests')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Special Requests <span class="text-gray-400">(optional)</span></label>
+                <textarea name="special_requests" rows="3" placeholder="Any special requests or preferences..." class="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-amber-500 focus:border-amber-500">{{ old('special_requests') }}</textarea>
+            </div>
+
+            {{-- Price Summary --}}
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4" x-show="nights > 0">
+                <div class="flex justify-between items-center text-sm mb-2">
+                    <span class="text-gray-500">${{ number_format($room->price_per_night) }} × <span x-text="nights"></span> night(s)</span>
+                    <span class="font-semibold" x-text="'$' + total.toFixed(2)"></span>
                 </div>
-            @endif
-
-            {{-- Booking Form --}}
-            <form method="POST" action="{{ route('reservations.store') }}" class="card p-6 space-y-6 animate-fade-in-up animation-delay-200">
-                @csrf
-                @php($isAdminView = false)
-                @include('reservations._form')
-
-                {{-- Info Card --}}
-                <div class="flex items-start gap-3 rounded-xl bg-blue-50 px-5 py-4 ring-1 ring-blue-200/50">
-                    <svg class="h-5 w-5 shrink-0 text-blue-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                    </svg>
-                    <div class="text-sm text-blue-800">
-                        <p class="font-semibold">How it works</p>
-                        <p class="mt-1 text-blue-600">The total price is calculated automatically based on the room rate and number of nights. After booking, you can pay with Stripe, PayPal, or on-site.</p>
-                    </div>
+                <div class="border-t border-gray-200 dark:border-gray-600 pt-2 mt-2 flex justify-between items-center">
+                    <span class="font-semibold">Total</span>
+                    <span class="text-xl font-bold text-amber-600 dark:text-amber-400" x-text="'$' + total.toFixed(2)"></span>
                 </div>
+            </div>
 
-                <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-6">
-                    <a href="{{ route('chambres.index') }}" class="btn-secondary">Cancel</a>
-                    <x-primary-button>
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        Confirm Booking
-                    </x-primary-button>
-                </div>
-            </form>
-        </div>
+            <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl hover:from-amber-600 hover:to-orange-600 shadow-lg shadow-amber-500/25 transition-all hover:-translate-y-0.5">
+                <i class="fas fa-check mr-2"></i> Confirm Reservation
+            </button>
+        </form>
     </div>
-</x-app-layout>
+</div>
+
+@push('scripts')
+<script>
+function bookingForm() {
+    return {
+        checkIn: '{{ old("check_in") }}',
+        checkOut: '{{ old("check_out") }}',
+        pricePerNight: {{ $room->price_per_night }},
+        get nights() {
+            if (!this.checkIn || !this.checkOut) return 0;
+            const d1 = new Date(this.checkIn), d2 = new Date(this.checkOut);
+            const diff = Math.ceil((d2 - d1) / (1000 * 60 * 60 * 24));
+            return diff > 0 ? diff : 0;
+        },
+        get total() { return this.nights * this.pricePerNight; }
+    };
+}
+</script>
+@endpush
+@endsection

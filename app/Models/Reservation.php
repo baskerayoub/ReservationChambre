@@ -2,83 +2,81 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Reservation extends Model
 {
-    public const STATUSES = ['pending', 'confirmed', 'cancelled'];
-
-    public const STATUS_LABELS = [
-        'pending' => 'Pending',
-        'confirmed' => 'Confirmed',
-        'cancelled' => 'Cancelled',
-    ];
+    use HasFactory;
 
     protected $fillable = [
-        'user_id',
-        'chambre_id',
-        'date_debut',
-        'date_fin',
-        'nombre_personnes',
-        'status',
-        'prix_total',
+        'user_id', 'room_id', 'check_in', 'check_out',
+        'guests', 'total_price', 'status', 'special_requests',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'date_debut' => 'date',
-            'date_fin' => 'date',
-            'prix_total' => 'decimal:2',
-        ];
-    }
+    protected $casts = [
+        'check_in' => 'date',
+        'check_out' => 'date',
+        'total_price' => 'decimal:2',
+    ];
 
-    public function user(): BelongsTo
+    /* ── Relationships ────────────────────────────── */
+
+    public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    public function chambre(): BelongsTo
+    public function room()
     {
-        return $this->belongsTo(Chambre::class);
+        return $this->belongsTo(Room::class);
     }
 
-    public function payment(): HasOne
+    public function payment()
     {
         return $this->hasOne(Payment::class);
     }
 
-    public static function conflictsForRoom(int $chambreId, string $start, string $end, ?int $ignoreReservationId = null): bool
+    public function review()
     {
-        return static::query()
-            ->where('chambre_id', $chambreId)
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->when($ignoreReservationId, fn (Builder $query) => $query->whereKeyNot($ignoreReservationId))
-            ->whereDate('date_debut', '<', $end)
-            ->whereDate('date_fin', '>', $start)
-            ->exists();
+        return $this->hasOne(Review::class);
     }
 
-    public function nights(): int
+    /* ── Scopes ───────────────────────────────────── */
+
+    public function scopeStatus($query, string $status)
     {
-        return max(1, (int) $this->date_debut->diffInDays($this->date_fin));
+        return $query->where('status', $status);
     }
 
-    public function canBePaid(): bool
+    public function scopeUpcoming($query)
     {
-        return $this->status !== 'cancelled' && ($this->payment?->status ?? 'pending') !== 'paid';
+        return $query->where('check_in', '>=', now()->toDateString())
+                     ->whereIn('status', ['pending', 'confirmed']);
     }
 
-    public function canBeChangedByClient(): bool
+    public function scopeActive($query)
     {
-        return $this->status !== 'cancelled' && $this->date_debut->isFuture();
+        return $query->where('check_in', '<=', now()->toDateString())
+                     ->where('check_out', '>=', now()->toDateString())
+                     ->where('status', 'confirmed');
     }
 
-    public function statusLabel(): string
+    /* ── Computed ─────────────────────────────────── */
+
+    public function getNightsAttribute(): int
     {
-        return self::STATUS_LABELS[$this->status] ?? ucfirst($this->status);
+        return $this->check_in->diffInDays($this->check_out);
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->payment && $this->payment->status === 'completed';
+    }
+
+    public function canBeCancelled(): bool
+    {
+        return in_array($this->status, ['pending', 'confirmed'])
+            && $this->check_in->isFuture();
     }
 }

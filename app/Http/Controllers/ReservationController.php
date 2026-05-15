@@ -3,181 +3,165 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservationRequest;
-use App\Http\Requests\UpdateReservationRequest;
-use App\Models\Chambre;
 use App\Models\Reservation;
-use Illuminate\Http\RedirectResponse;
+use App\Models\Room;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 
 class ReservationController extends Controller
 {
-    public function index(Request $request): View
+    /**
+     * Show user's reservations.
+     */
+    public function index()
     {
-        $isAdminView = $this->isAdminRoute($request);
+        $reservations = Auth::user()
+            ->reservations()
+            ->with(['room.primaryImage', 'payment'])
+            ->latest()
+            ->paginate(10);
 
-        $reservations = Reservation::query()
-            ->with(['user', 'chambre', 'payment'])
-            ->when(! $isAdminView, fn ($query) => $query->where('user_id', $request->user()->id))
-            ->latest('id')
-            ->paginate(12);
-
-        return view('reservations.index', [
-            'reservations' => $reservations,
-            'isAdminView' => $isAdminView,
-        ]);
+        return view('reservations.index', compact('reservations'));
     }
 
-    public function create(Request $request): View
+    /**
+     * Show booking form for a room.
+     */
+    public function create(Request $request)
     {
-        $selectedChambre = null;
+        $room = Room::findOrFail($request->query('room_id'));
+        return view('reservations.create', compact('room'));
+    }
 
-        if ($request->filled('chambre_id')) {
-            $selectedChambre = Chambre::findOrFail($request->integer('chambre_id'));
+    /**
+     * Store a new reservation.
+     */
+    public function store(StoreReservationRequest $request)
+    {
+        $room = Room::findOrFail($request->room_id);
+
+        // Validate capacity
+        if ($request->guests > $room->capacity) {
+            return back()->withErrors(['guests' => "This room has a maximum capacity of {$room->capacity} guests."]);
         }
 
-        $start = $request->query('date_debut');
-        $end = $request->query('date_fin');
+        // Check availability (prevent double booking)
+        if (! $room->isAvailableBetween($request->check_in, $request->check_out)) {
+            return back()->withErrors(['check_in' => 'This room is not available for the selected dates.']);
+        }
 
-        return view('reservations.create', [
-            'reservation' => new Reservation([
-                'chambre_id' => $selectedChambre?->id,
-                'date_debut' => $start,
-                'date_fin' => $end,
-                'nombre_personnes' => 1,
-            ]),
-            'chambres' => Chambre::query()->where('status', 'disponible')->orderBy('numero')->get(),
-            'selectedChambre' => $selectedChambre,
+        $checkIn = \Carbon\Carbon::parse($request->check_in);
+        $checkOut = \Carbon\Carbon::parse($request->check_out);
+        $nights = $checkIn->diffInDays($checkOut);
+        $totalPrice = $nights * $room->price_per_night;
+
+        $reservation = Reservation::create([
+            'user_id' => Auth::id(),
+            'room_id' => $room->id,
+            'check_in' => $request->check_in,
+            'check_out' => $request->check_out,
+            'guests' => $request->guests,
+            'total_price' => $totalPrice,
+            'special_requests' => $request->special_requests,
+            'status' => 'pending',
         ]);
-    }
-
-    public function store(StoreReservationRequest $request): RedirectResponse
-    {
-        $data = $request->validated();
-        $chambre = Chambre::findOrFail($data['chambre_id']);
-
-        $this->ensureRoomCanBeBooked($chambre, $data['date_debut'], $data['date_fin']);
-
-        $reservation = DB::transaction(function () use ($request, $data, $chambre): Reservation {
-            return Reservation::create([
-                'user_id' => $request->user()->id,
-                'chambre_id' => $chambre->id,
-                'date_debut' => $data['date_debut'],
-                'date_fin' => $data['date_fin'],
-                'nombre_personnes' => $data['nombre_personnes'],
-                'status' => 'pending',
-                'prix_total' => $this->calculateTotalPrice($chambre, $data['date_debut'], $data['date_fin']),
-            ]);
-        });
 
         return redirect()
             ->route('reservations.show', $reservation)
-            ->with('success', 'Reservation creee. Vous pouvez maintenant choisir Stripe, PayPal ou paiement sur place.');
+            ->with('success', 'Reservation created successfully! Please proceed to payment.');
     }
 
-    public function show(Request $request, Reservation $reservation): View
+    /**
+     * Show reservation details.
+     */
+    public function show(Reservation $reservation)
     {
-        $this->authorizeReservationAccess($request, $reservation);
+        $this->authorizeAccess($reservation);
+        $reservation->load(['room.images', 'room.amenities', 'payment', 'review']);
 
-        return view('reservations.show', [
-            'reservation' => $reservation->load(['user', 'chambre', 'payment']),
-            'isAdminView' => $this->isAdminRoute($request),
-        ]);
+        return view('reservations.show', compact('reservation'));
     }
 
-    public function edit(Request $request, Reservation $reservation): View
+    /**
+     * Show edit form.
+     */
+    public function edit(Reservation $reservation)
     {
-        $this->authorizeReservationAccess($request, $reservation);
+        $this->authorizeAccess($reservation);
 
-        return view('reservations.edit', [
-            'reservation' => $reservation->load('chambre'),
-            'chambres' => Chambre::query()->orderBy('numero')->get(),
-            'statuses' => Reservation::STATUSES,
-            'isAdminView' => $this->isAdminRoute($request),
-        ]);
-    }
-
-    public function update(UpdateReservationRequest $request, Reservation $reservation): RedirectResponse
-    {
-        $this->authorizeReservationAccess($request, $reservation);
-
-        if ($reservation->status === 'cancelled' && ! $this->isAdminRoute($request)) {
-            throw ValidationException::withMessages([
-                'reservation' => 'Une reservation annulee ne peut pas etre modifiee.',
-            ]);
+        if (! $reservation->canBeCancelled()) {
+            return back()->with('error', 'This reservation cannot be modified.');
         }
 
-        $data = $request->validated();
-        $chambre = Chambre::findOrFail($data['chambre_id']);
-
-        $this->ensureRoomCanBeBooked($chambre, $data['date_debut'], $data['date_fin'], $reservation->id);
-
-        DB::transaction(function () use ($request, $reservation, $data, $chambre): void {
-            $reservation->update([
-                'chambre_id' => $chambre->id,
-                'date_debut' => $data['date_debut'],
-                'date_fin' => $data['date_fin'],
-                'nombre_personnes' => $data['nombre_personnes'],
-                'status' => $this->isAdminRoute($request) ? ($data['status'] ?? $reservation->status) : $reservation->status,
-                'prix_total' => $this->calculateTotalPrice($chambre, $data['date_debut'], $data['date_fin']),
-            ]);
-
-            if ($reservation->payment && $reservation->payment->status !== 'paid') {
-                $reservation->payment->update(['montant' => $reservation->prix_total]);
-            }
-        });
-
-        return redirect()
-            ->route($this->isAdminRoute($request) ? 'admin.reservations.show' : 'reservations.show', $reservation)
-            ->with('success', 'Reservation modifiee avec succes.');
+        return view('reservations.edit', compact('reservation'));
     }
 
-    public function destroy(Request $request, Reservation $reservation): RedirectResponse
+    /**
+     * Update reservation.
+     */
+    public function update(Request $request, Reservation $reservation)
     {
-        $this->authorizeReservationAccess($request, $reservation);
+        $this->authorizeAccess($reservation);
+
+        if (! $reservation->canBeCancelled()) {
+            return back()->with('error', 'This reservation cannot be modified.');
+        }
+
+        $request->validate([
+            'check_in' => 'required|date|after_or_equal:today',
+            'check_out' => 'required|date|after:check_in',
+            'guests' => 'required|integer|min:1|max:' . $reservation->room->capacity,
+            'special_requests' => 'nullable|string|max:1000',
+        ]);
+
+        $room = $reservation->room;
+
+        if (! $room->isAvailableBetween($request->check_in, $request->check_out, $reservation->id)) {
+            return back()->withErrors(['check_in' => 'The room is not available for these dates.']);
+        }
+
+        $checkIn = \Carbon\Carbon::parse($request->check_in);
+        $checkOut = \Carbon\Carbon::parse($request->check_out);
+        $nights = $checkIn->diffInDays($checkOut);
+
+        $reservation->update([
+            'check_in' => $request->check_in,
+            'check_out' => $request->check_out,
+            'guests' => $request->guests,
+            'total_price' => $nights * $room->price_per_night,
+            'special_requests' => $request->special_requests,
+        ]);
+
+        return redirect()
+            ->route('reservations.show', $reservation)
+            ->with('success', 'Reservation updated successfully.');
+    }
+
+    /**
+     * Cancel reservation.
+     */
+    public function destroy(Reservation $reservation)
+    {
+        $this->authorizeAccess($reservation);
+
+        if (! $reservation->canBeCancelled()) {
+            return back()->with('error', 'This reservation cannot be cancelled.');
+        }
 
         $reservation->update(['status' => 'cancelled']);
 
         return redirect()
-            ->route($this->isAdminRoute($request) ? 'admin.reservations.index' : 'reservations.index')
-            ->with('success', 'Reservation annulee avec succes.');
+            ->route('reservations.index')
+            ->with('success', 'Reservation cancelled successfully.');
     }
 
-    private function calculateTotalPrice(Chambre $chambre, string $start, string $end): float
+    /**
+     * Ensure user can access this reservation.
+     */
+    private function authorizeAccess(Reservation $reservation): void
     {
-        $nights = max(1, Carbon::parse($start)->diffInDays(Carbon::parse($end)));
-
-        return (float) $chambre->prix * $nights;
-    }
-
-    private function ensureRoomCanBeBooked(Chambre $chambre, string $start, string $end, ?int $ignoreReservationId = null): void
-    {
-        if ($chambre->status !== 'disponible') {
-            throw ValidationException::withMessages([
-                'chambre_id' => 'Cette chambre est actuellement indisponible.',
-            ]);
+        if (! Auth::user()->isStaff() && $reservation->user_id !== Auth::id()) {
+            abort(403);
         }
-
-        if (Reservation::conflictsForRoom($chambre->id, $start, $end, $ignoreReservationId)) {
-            throw ValidationException::withMessages([
-                'date_debut' => 'Cette chambre est deja reservee pour ces dates.',
-            ]);
-        }
-    }
-
-    private function authorizeReservationAccess(Request $request, Reservation $reservation): void
-    {
-        abort_unless(
-            $request->user()?->isAdmin() || $reservation->user_id === $request->user()?->id,
-            403
-        );
-    }
-
-    private function isAdminRoute(Request $request): bool
-    {
-        return str_starts_with((string) $request->route()?->getName(), 'admin.');
     }
 }

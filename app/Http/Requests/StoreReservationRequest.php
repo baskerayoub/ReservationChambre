@@ -2,31 +2,32 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreReservationRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
-            'chambre_id' => ['required', 'exists:chambres,id'],
-            'date_debut' => ['required', 'date', 'after_or_equal:today'],
-            'date_fin' => ['required', 'date', 'after:date_debut'],
-            'nombre_personnes' => ['required', 'integer', 'min:1', 'max:8'],
+            'room_id' => 'required|exists:rooms,id',
+            'check_in' => 'required|date|after_or_equal:today',
+            'check_out' => 'required|date|after:check_in',
+            'guests' => 'required|integer|min:1|max:10',
+            'special_requests' => 'nullable|string|max:1000',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'check_in.after_or_equal' => 'Check-in date must be today or later.',
+            'check_out.after' => 'Check-out date must be after check-in.',
+            'guests.max' => 'Maximum 10 guests per room.',
         ];
     }
 }

@@ -1,182 +1,101 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <div class="flex items-center gap-2 text-sm text-gray-500">
-                    <a href="{{ route($isAdminView ? 'admin.reservations.index' : 'reservations.index') }}" class="hover:text-blue-600 transition-colors">Bookings</a>
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    <span class="text-gray-900 font-medium">Booking #{{ $reservation->id }}</span>
-                </div>
-                <h2 class="mt-1 text-xl font-bold text-gray-900">Booking Confirmation</h2>
+@extends('layouts.app')
+@section('title', 'Reservation #' . $reservation->id)
+
+@section('content')
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <nav class="flex items-center gap-2 text-sm text-gray-400 mb-6">
+        <a href="{{ route('reservations.index') }}" class="hover:text-amber-500">My Reservations</a>
+        <i class="fas fa-chevron-right text-xs"></i>
+        <span class="text-gray-700 dark:text-gray-300">#{{ $reservation->id }}</span>
+    </nav>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-6">
+            @php
+                $sc = ['pending'=>['bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20','text-yellow-700 dark:text-yellow-400','clock'],'confirmed'=>['bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20','text-emerald-700 dark:text-emerald-400','check-circle'],'cancelled'=>['bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20','text-red-700 dark:text-red-400','times-circle'],'completed'=>['bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20','text-blue-700 dark:text-blue-400','flag-checkered']];
+                $s = $sc[$reservation->status];
+            @endphp
+            <div class="p-4 rounded-xl border {{ $s[0] }} {{ $s[1] }} flex items-center gap-3">
+                <i class="fas fa-{{ $s[2] }} text-xl"></i>
+                <div><p class="font-semibold">Status: {{ ucfirst($reservation->status) }}</p></div>
             </div>
-            @if ($reservation->status !== 'cancelled')
-                <a href="{{ route($isAdminView ? 'admin.reservations.edit' : 'reservations.edit', $reservation) }}" class="btn-secondary">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
-                    Modify Booking
-                </a>
+
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+                <h2 class="text-xl font-bold">{{ $reservation->room->name }}</h2>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+                    @foreach([['calendar-check','Check-in',$reservation->check_in->format('M d, Y')],['calendar-minus','Check-out',$reservation->check_out->format('M d, Y')],['moon','Nights',$reservation->nights],['users','Guests',$reservation->guests]] as $item)
+                    <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                        <i class="fas fa-{{ $item[0] }} text-amber-500 mb-1"></i>
+                        <p class="text-xs text-gray-400">{{ $item[1] }}</p>
+                        <p class="text-sm font-semibold">{{ $item[2] }}</p>
+                    </div>
+                    @endforeach
+                </div>
+                @if($reservation->special_requests)
+                <div class="mt-4 p-3 bg-amber-50 dark:bg-amber-500/5 rounded-xl">
+                    <p class="text-xs font-medium text-amber-700 dark:text-amber-400"><i class="fas fa-comment-dots mr-1"></i> Special Requests</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-300">{{ $reservation->special_requests }}</p>
+                </div>
+                @endif
+            </div>
+
+            @if($reservation->status === 'completed' && !$reservation->review)
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-semibold mb-4"><i class="fas fa-star text-amber-400 mr-2"></i>Leave a Review</h3>
+                <form method="POST" action="{{ route('reviews.store', $reservation) }}">
+                    @csrf
+                    <div class="mb-4" x-data="{ rating: 5 }">
+                        <div class="flex gap-1">
+                            @for($i = 1; $i <= 5; $i++)
+                            <button type="button" @click="rating = {{ $i }}" class="text-2xl focus:outline-none">
+                                <i :class="rating >= {{ $i }} ? 'fas fa-star text-amber-400' : 'far fa-star text-gray-300'"></i>
+                            </button>
+                            @endfor
+                        </div>
+                        <input type="hidden" name="rating" :value="rating" />
+                    </div>
+                    <textarea name="comment" rows="3" placeholder="Your experience..." class="w-full mb-3 rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-amber-500"></textarea>
+                    <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl">Submit</button>
+                </form>
+            </div>
             @endif
         </div>
-    </x-slot>
 
-    <div class="py-8 animate-fade-in">
-        <div class="mx-auto grid max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
-            {{-- ── Booking Details ── --}}
-            <section class="card p-6 lg:col-span-2 space-y-6">
-                {{-- Booking ID Header --}}
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
-                            <svg class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Booking ID</p>
-                            <p class="text-lg font-bold text-gray-900">#{{ str_pad($reservation->id, 6, '0', STR_PAD_LEFT) }}</p>
-                        </div>
-                    </div>
-                    @php
-                        $badgeClass = match($reservation->status) {
-                            'pending' => 'badge-pending',
-                            'confirmed' => 'badge-confirmed',
-                            'cancelled' => 'badge-cancelled',
-                            default => 'badge-pending',
-                        };
-                    @endphp
-                    <span class="badge {{ $badgeClass }} !text-sm !px-4 !py-1.5">{{ $reservation->statusLabel() }}</span>
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="font-semibold mb-4">Price Summary</h3>
+                <div class="text-sm space-y-2">
+                    <div class="flex justify-between"><span class="text-gray-500">${{ number_format($reservation->room->price_per_night,2) }} × {{ $reservation->nights }} nights</span><span>${{ number_format($reservation->total_price,2) }}</span></div>
+                    <div class="border-t pt-2 flex justify-between"><span class="font-bold">Total</span><span class="text-xl font-bold text-amber-600 dark:text-amber-400">${{ number_format($reservation->total_price,2) }}</span></div>
                 </div>
-
-                <div class="border-t border-gray-100"></div>
-
-                {{-- Details Grid --}}
-                <div class="grid gap-5 sm:grid-cols-2">
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Room</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">Room {{ $reservation->chambre->numero }} — {{ $reservation->chambre->type }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Guest</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">{{ $reservation->user->name }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Check-in</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">{{ $reservation->date_debut->format('l, M d, Y') }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Check-out</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">{{ $reservation->date_fin->format('l, M d, Y') }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Nights</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">{{ $reservation->nights() }} {{ $reservation->nights() === 1 ? 'night' : 'nights' }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-pink-50 text-pink-600">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
-                        </div>
-                        <div>
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Guests</p>
-                            <p class="mt-1 text-sm font-bold text-gray-900">{{ $reservation->nombre_personnes }} {{ $reservation->nombre_personnes === 1 ? 'guest' : 'guests' }}</p>
-                        </div>
-                    </div>
+                @if($reservation->payment)
+                <div class="mt-4 p-3 rounded-lg {{ $reservation->payment->status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' }}">
+                    <p class="text-sm font-medium"><i class="fas fa-{{ $reservation->payment->status === 'completed' ? 'check-circle' : 'clock' }} mr-1"></i> {{ ucfirst($reservation->payment->status) }} via {{ ucfirst($reservation->payment->method) }}</p>
                 </div>
-
-                {{-- Price Summary --}}
-                <div class="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 p-5 ring-1 ring-blue-200/50">
-                    <div class="flex items-center justify-between text-sm text-gray-600">
-                        <span>{{ number_format($reservation->chambre->prix, 2) }} MAD × {{ $reservation->nights() }} nights</span>
-                        <span class="font-medium">{{ number_format($reservation->prix_total, 2) }} MAD</span>
-                    </div>
-                    <div class="mt-3 flex items-center justify-between border-t border-blue-200/50 pt-3">
-                        <span class="text-base font-bold text-gray-900">Total</span>
-                        <span class="text-2xl font-extrabold text-blue-700">{{ number_format($reservation->prix_total, 2) }} MAD</span>
-                    </div>
-                </div>
-            </section>
-
-            {{-- ── Payment Sidebar ── --}}
-            <aside class="space-y-6">
-                {{-- Payment Status Card --}}
-                <div class="card p-6">
-                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
-                        <svg class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
-                        Payment
-                    </h3>
-                    <dl class="mt-4 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <dt class="text-sm text-gray-500">Status</dt>
-                            <dd>
-                                @php
-                                    $payStatus = $reservation->payment?->status ?? 'pending';
-                                    $payBadge = $payStatus === 'paid' ? 'badge-paid' : 'badge-pending';
-                                @endphp
-                                <span class="badge {{ $payBadge }}">{{ ucfirst($payStatus) }}</span>
-                            </dd>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <dt class="text-sm text-gray-500">Method</dt>
-                            <dd class="text-sm font-semibold text-gray-900">{{ $reservation->payment ? (\App\Models\Payment::METHOD_LABELS[$reservation->payment->method] ?? $reservation->payment->method) : '—' }}</dd>
-                        </div>
-                        <div class="flex items-center justify-between gap-4">
-                            <dt class="text-sm text-gray-500">Transaction</dt>
-                            <dd class="text-xs font-mono font-semibold text-gray-700 break-all text-right">{{ $reservation->payment?->transaction_id ?? '—' }}</dd>
-                        </div>
-                    </dl>
-
-                    @if ($reservation->canBePaid())
-                        <form method="POST" action="{{ route($isAdminView ? 'admin.payments.store' : 'payments.store', $reservation) }}" class="mt-6 space-y-4">
-                            @csrf
-                            <div>
-                                <x-input-label for="method" value="Payment Method" />
-                                <select id="method" name="method" class="form-input-blue mt-1 text-sm">
-                                    @foreach (\App\Models\Payment::METHOD_LABELS as $method => $label)
-                                        <option value="{{ $method }}">{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <button class="btn-primary w-full justify-center !py-3">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Process Payment
-                            </button>
-                        </form>
-                    @endif
-                </div>
-
-                {{-- Cancel --}}
-                @if ($reservation->status !== 'cancelled')
-                    <form method="POST" action="{{ route($isAdminView ? 'admin.reservations.destroy' : 'reservations.destroy', $reservation) }}" onsubmit="return confirm('Are you sure you want to cancel this booking?')">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn-danger w-full justify-center">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            Cancel Booking
-                        </button>
-                    </form>
                 @endif
-            </aside>
+            </div>
+
+            @if($reservation->status === 'pending' && !$reservation->isPaid())
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 space-y-3">
+                <h3 class="font-semibold mb-2">Pay Now</h3>
+                <form method="POST" action="{{ route('payment.stripe', $reservation) }}">@csrf
+                    <button class="w-full py-3 bg-[#635bff] text-white font-semibold rounded-xl hover:bg-[#5046e5] transition-colors"><i class="fab fa-stripe mr-2"></i>Stripe</button>
+                </form>
+                <form method="POST" action="{{ route('payment.paypal', $reservation) }}">@csrf
+                    <button class="w-full py-3 bg-[#0070ba] text-white font-semibold rounded-xl hover:bg-[#005a99] transition-colors"><i class="fab fa-paypal mr-2"></i>PayPal</button>
+                </form>
+            </div>
+            @endif
+
+            @if($reservation->canBeCancelled())
+            <div class="space-y-3">
+                <a href="{{ route('reservations.edit', $reservation) }}" class="block w-full py-2.5 text-center text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700"><i class="fas fa-edit mr-1"></i> Modify</a>
+                <form method="POST" action="{{ route('reservations.destroy', $reservation) }}" onsubmit="return confirm('Cancel this reservation?')">@csrf @method('DELETE')
+                    <button class="w-full py-2.5 text-sm font-medium text-red-600 border border-red-300 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10"><i class="fas fa-times mr-1"></i> Cancel</button>
+                </form>
+            </div>
+            @endif
         </div>
     </div>
-</x-app-layout>
+</div>
+@endsection

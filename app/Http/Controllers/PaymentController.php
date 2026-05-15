@@ -2,47 +2,103 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Payment;
 use App\Models\Reservation;
-use Illuminate\Http\RedirectResponse;
+use App\Services\StripeService;
+use App\Services\PayPalService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Auth;
 
 class PaymentController extends Controller
 {
-    public function store(Request $request, Reservation $reservation): RedirectResponse
+    /**
+     * Initiate Stripe payment.
+     */
+    public function stripeCheckout(Reservation $reservation, StripeService $stripe)
     {
-        abort_unless(
-            $request->user()?->isAdmin() || $reservation->user_id === $request->user()?->id,
-            403
-        );
+        $this->authorize($reservation);
 
-        if (! $reservation->canBePaid()) {
-            throw ValidationException::withMessages([
-                'payment' => 'Cette reservation ne peut pas etre payee.',
-            ]);
+        $url = $stripe->createCheckoutSession($reservation);
+
+        if (! $url) {
+            return back()->with('error', 'Unable to initiate payment. Please try again.');
         }
 
-        $data = $request->validate([
-            'method' => ['required', Rule::in(Payment::METHODS)],
-        ]);
+        return redirect()->away($url);
+    }
 
-        $reservation->payment()->updateOrCreate(
-            ['reservation_id' => $reservation->id],
-            [
-                'montant' => $reservation->prix_total,
-                'method' => $data['method'],
-                'status' => 'paid',
-                'transaction_id' => Str::upper($data['method']).'-SIM-'.Str::upper(Str::random(10)),
-            ]
-        );
+    /**
+     * Stripe success callback.
+     */
+    public function stripeSuccess(Request $request, Reservation $reservation, StripeService $stripe)
+    {
+        $sessionId = $request->query('session_id');
 
-        $reservation->update(['status' => 'confirmed']);
+        if ($sessionId && $stripe->verifyPayment($sessionId)) {
+            return redirect()
+                ->route('reservations.show', $reservation)
+                ->with('success', 'Payment successful! Your reservation is confirmed.');
+        }
 
         return redirect()
-            ->route($request->user()->isAdmin() ? 'admin.reservations.show' : 'reservations.show', $reservation)
-            ->with('success', 'Paiement simule avec succes. La reservation est confirmee.');
+            ->route('reservations.show', $reservation)
+            ->with('error', 'Payment verification failed. Please contact support.');
+    }
+
+    /**
+     * Initiate PayPal payment.
+     */
+    public function paypalCheckout(Reservation $reservation, PayPalService $paypal)
+    {
+        $this->authorize($reservation);
+
+        $url = $paypal->createOrder($reservation);
+
+        if (! $url) {
+            return back()->with('error', 'Unable to initiate PayPal payment. Please try again.');
+        }
+
+        return redirect()->away($url);
+    }
+
+    /**
+     * PayPal success callback.
+     */
+    public function paypalSuccess(Request $request, Reservation $reservation, PayPalService $paypal)
+    {
+        $orderId = $request->query('token');
+
+        if ($orderId && $paypal->capturePayment($orderId)) {
+            return redirect()
+                ->route('reservations.show', $reservation)
+                ->with('success', 'PayPal payment successful! Your reservation is confirmed.');
+        }
+
+        return redirect()
+            ->route('reservations.show', $reservation)
+            ->with('error', 'PayPal payment verification failed.');
+    }
+
+    /**
+     * Payment cancelled.
+     */
+    public function cancel(Reservation $reservation)
+    {
+        return redirect()
+            ->route('reservations.show', $reservation)
+            ->with('info', 'Payment was cancelled.');
+    }
+
+    /**
+     * Authorization check.
+     */
+    private function authorize(Reservation $reservation): void
+    {
+        if ($reservation->user_id !== Auth::id() && ! Auth::user()->isStaff()) {
+            abort(403);
+        }
+
+        if ($reservation->isPaid()) {
+            abort(400, 'This reservation is already paid.');
+        }
     }
 }

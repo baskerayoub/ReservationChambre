@@ -2,258 +2,272 @@
 
 namespace Database\Seeders;
 
-use App\Models\Chambre;
+use App\Models\Amenity;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Models\Review;
+use App\Models\Room;
+use App\Models\RoomImage;
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // ── Users ──
-        $admin = User::updateOrCreate(
-            ['email' => 'admin@familyhotel.test'],
-            [
-                'name' => 'Hotel Admin',
-                'role' => 'admin',
-                'password' => Hash::make('password'),
-            ]
-        );
+        /* ── Users ──────────────────────────────────── */
 
-        $staff = User::updateOrCreate(
-            ['email' => 'staff@familyhotel.test'],
-            [
-                'name' => 'Sarah Staff',
-                'role' => 'staff',
-                'password' => Hash::make('password'),
-            ]
-        );
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@hotelia.com',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
 
-        $client = User::updateOrCreate(
-            ['email' => 'client@familyhotel.test'],
-            [
-                'name' => 'John Doe',
-                'role' => 'client',
-                'password' => Hash::make('password'),
-            ]
-        );
+        $receptionist = User::create([
+            'name' => 'Sarah Martin',
+            'email' => 'reception@hotelia.com',
+            'password' => Hash::make('password'),
+            'role' => 'receptionist',
+            'email_verified_at' => now(),
+        ]);
 
-        $client2 = User::updateOrCreate(
-            ['email' => 'jane@familyhotel.test'],
-            [
-                'name' => 'Jane Smith',
-                'role' => 'client',
-                'password' => Hash::make('password'),
-            ]
-        );
+        $clients = collect([
+            ['name' => 'John Doe', 'email' => 'john@example.com'],
+            ['name' => 'Jane Smith', 'email' => 'jane@example.com'],
+            ['name' => 'Mike Johnson', 'email' => 'mike@example.com'],
+            ['name' => 'Emily Davis', 'email' => 'emily@example.com'],
+            ['name' => 'David Wilson', 'email' => 'david@example.com'],
+        ])->map(fn ($c) => User::create([
+            ...$c,
+            'password' => Hash::make('password'),
+            'role' => 'client',
+            'email_verified_at' => now(),
+        ]));
 
-        // ── Rooms ──
-        $rooms = [
+        /* ── Amenities ──────────────────────────────── */
+
+        $amenities = collect([
+            ['name' => 'Free Wi-Fi', 'icon' => 'wifi'],
+            ['name' => 'Air Conditioning', 'icon' => 'snowflake'],
+            ['name' => 'Mini Bar', 'icon' => 'glass-water'],
+            ['name' => 'Room Service', 'icon' => 'bell-concierge'],
+            ['name' => 'TV', 'icon' => 'tv'],
+            ['name' => 'Safe', 'icon' => 'vault'],
+            ['name' => 'Balcony', 'icon' => 'mountain-sun'],
+            ['name' => 'Sea View', 'icon' => 'water'],
+            ['name' => 'Bathtub', 'icon' => 'bath'],
+            ['name' => 'King Size Bed', 'icon' => 'bed'],
+            ['name' => 'Breakfast Included', 'icon' => 'mug-saucer'],
+            ['name' => 'Swimming Pool Access', 'icon' => 'person-swimming'],
+        ])->map(fn ($a) => Amenity::create($a));
+
+        /* ── Rooms ──────────────────────────────────── */
+
+        $roomsData = [
             [
-                'numero' => '101',
-                'type' => 'Single',
-                'prix' => 350,
-                'confort' => 'Standard',
-                'equipements' => ['WiFi', 'TV', 'Desk'],
-                'description' => 'A cozy single room perfect for solo travelers and business trips. Features a comfortable queen bed, work desk, and modern amenities for a relaxing stay.',
-                'image' => 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Comfort Single Room',
+                'type' => 'single',
+                'description' => 'A cozy and elegant single room, perfect for solo travelers. Features modern amenities and a peaceful atmosphere for a restful stay.',
+                'price_per_night' => 89.00,
+                'capacity' => 1,
+                'beds' => 1,
+                'bathrooms' => 1,
+                'area' => 22,
+                'floor' => 1,
+                'is_featured' => false,
+                'amenity_ids' => [1, 2, 5, 6],
             ],
             [
-                'numero' => '102',
-                'type' => 'Single',
-                'prix' => 420,
-                'confort' => 'Deluxe',
-                'equipements' => ['WiFi', 'Smart TV', 'Desk', 'Air Conditioning', 'Private Bathroom'],
-                'description' => 'An upgraded single room with premium bedding, smart TV, and a dedicated workspace. Ideal for extended business stays.',
-                'image' => 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Superior Double Room',
+                'type' => 'double',
+                'description' => 'Spacious double room with elegant décor, ideal for couples. Enjoy premium bedding and a relaxing ambiance throughout your stay.',
+                'price_per_night' => 129.00,
+                'capacity' => 2,
+                'beds' => 1,
+                'bathrooms' => 1,
+                'area' => 30,
+                'floor' => 2,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 5, 6, 10],
             ],
             [
-                'numero' => '201',
-                'type' => 'Double',
-                'prix' => 520,
-                'confort' => 'Standard',
-                'equipements' => ['WiFi', 'TV', 'Private Bathroom', 'Air Conditioning'],
-                'description' => 'A spacious double room for couples or friends. Features two comfortable beds, private bathroom, and all essential amenities.',
-                'image' => 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Deluxe Room with Sea View',
+                'type' => 'deluxe',
+                'description' => 'Luxurious deluxe room offering breathtaking sea views from your private balcony. Indulge in premium comfort with top-tier amenities.',
+                'price_per_night' => 199.00,
+                'capacity' => 2,
+                'beds' => 1,
+                'bathrooms' => 1,
+                'area' => 38,
+                'floor' => 4,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 10],
             ],
             [
-                'numero' => '202',
-                'type' => 'Double',
-                'prix' => 690,
-                'confort' => 'Deluxe',
-                'equipements' => ['WiFi', 'Smart TV', 'Air Conditioning', 'Balcony', 'Mini Bar'],
-                'description' => 'A bright deluxe double room with balcony views and premium touches. Perfect for a romantic getaway or a comfortable family trip.',
-                'image' => 'https://images.unsplash.com/photo-1595576508898-0ad5c879a061?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Family Suite',
+                'type' => 'family',
+                'description' => 'A generously designed family suite with separate living and sleeping areas. Perfect for families seeking comfort and convenience.',
+                'price_per_night' => 259.00,
+                'capacity' => 4,
+                'beds' => 2,
+                'bathrooms' => 2,
+                'area' => 55,
+                'floor' => 3,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 4, 5, 6, 9, 11],
             ],
             [
-                'numero' => '301',
-                'type' => 'Family',
-                'prix' => 850,
-                'confort' => 'Deluxe',
-                'equipements' => ['WiFi', 'Smart TV', 'Air Conditioning', 'Private Bathroom', 'Living Area', 'Breakfast'],
-                'description' => 'A generous family room designed for parents and children. Includes a separate living area, breakfast included, and everything your family needs.',
-                'image' => 'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Royal Presidential Suite',
+                'type' => 'suite',
+                'description' => 'The crown jewel of Hotelia. An expansive suite with panoramic views, a private jacuzzi, and the finest furnishings for an unforgettable experience.',
+                'price_per_night' => 449.00,
+                'capacity' => 3,
+                'beds' => 1,
+                'bathrooms' => 2,
+                'area' => 75,
+                'floor' => 5,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
             ],
             [
-                'numero' => '302',
-                'type' => 'Family',
-                'prix' => 980,
-                'confort' => 'Luxury',
-                'equipements' => ['WiFi', 'Smart TV', 'Air Conditioning', 'Balcony', 'Mini Bar', 'Living Area', 'Parking', 'Breakfast'],
-                'description' => 'Our premium family suite with breathtaking views, spacious living area, complimentary breakfast, and free parking. The ultimate family experience.',
-                'image' => 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Economy Twin Room',
+                'type' => 'double',
+                'description' => 'A budget-friendly twin room offering all essential amenities. Great value for travelers who want comfort without the premium price tag.',
+                'price_per_night' => 99.00,
+                'capacity' => 2,
+                'beds' => 2,
+                'bathrooms' => 1,
+                'area' => 26,
+                'floor' => 1,
+                'is_featured' => false,
+                'amenity_ids' => [1, 2, 5, 6],
             ],
             [
-                'numero' => '401',
-                'type' => 'Suite',
-                'prix' => 1250,
-                'confort' => 'Luxury',
-                'equipements' => ['WiFi', 'Smart TV', 'Air Conditioning', 'Balcony', 'Mini Bar', 'Living Area', 'Desk', 'Parking', 'Breakfast'],
-                'description' => 'An exquisite luxury suite featuring separate living and sleeping areas, panoramic balcony, full minibar, and VIP amenities.',
-                'image' => 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'disponible',
+                'name' => 'Garden View Double',
+                'type' => 'double',
+                'description' => 'A charming double room overlooking our lush Mediterranean garden. Wake up to birdsong and the scent of fresh flowers every morning.',
+                'price_per_night' => 149.00,
+                'capacity' => 2,
+                'beds' => 1,
+                'bathrooms' => 1,
+                'area' => 32,
+                'floor' => 2,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 5, 6, 7, 10, 11],
             ],
             [
-                'numero' => '402',
-                'type' => 'Suite',
-                'prix' => 1100,
-                'confort' => 'Luxury',
-                'equipements' => ['WiFi', 'TV', 'Air Conditioning'],
-                'description' => 'Currently undergoing renovation to provide an even better luxury experience. Expected to reopen soon with upgraded furnishings.',
-                'image' => 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
-                'status' => 'maintenance',
+                'name' => 'Honeymoon Suite',
+                'type' => 'suite',
+                'description' => 'Romantic suite designed for newlyweds and couples celebrating special occasions. Features a private terrace, champagne service, and spa access.',
+                'price_per_night' => 349.00,
+                'capacity' => 2,
+                'beds' => 1,
+                'bathrooms' => 1,
+                'area' => 50,
+                'floor' => 5,
+                'is_featured' => true,
+                'amenity_ids' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
             ],
         ];
 
-        foreach ($rooms as $room) {
-            Chambre::updateOrCreate(['numero' => $room['numero']], $room);
+        foreach ($roomsData as $roomData) {
+            $amenityIds = $roomData['amenity_ids'];
+            unset($roomData['amenity_ids']);
+
+            $room = Room::create([
+                ...$roomData,
+                'slug' => Str::slug($roomData['name']) . '-' . Str::random(4),
+                'status' => 'available',
+            ]);
+
+            $room->amenities()->sync($amenityIds);
+
+            // Create a placeholder primary image
+            RoomImage::create([
+                'room_id' => $room->id,
+                'path' => 'rooms/placeholder.jpg',
+                'is_primary' => true,
+                'sort_order' => 0,
+            ]);
         }
 
-        // ── Reservations ──
+        /* ── Demo Reservations ──────────────────────── */
 
-        // Confirmed + paid reservation
-        $room201 = Chambre::where('numero', '201')->firstOrFail();
-        $start1 = now()->addDays(7)->toDateString();
-        $end1 = now()->addDays(10)->toDateString();
-        $total1 = (float) $room201->prix * 3;
+        $rooms = Room::all();
 
-        $res1 = Reservation::updateOrCreate(
-            ['user_id' => $client->id, 'chambre_id' => $room201->id, 'date_debut' => $start1],
-            [
-                'date_fin' => $end1,
-                'nombre_personnes' => 2,
+        // Past completed reservations
+        foreach ($clients->take(3) as $i => $client) {
+            $reservation = Reservation::create([
+                'user_id' => $client->id,
+                'room_id' => $rooms[$i + 1]->id,
+                'check_in' => now()->subDays(10 + $i * 5),
+                'check_out' => now()->subDays(7 + $i * 5),
+                'guests' => rand(1, 2),
+                'total_price' => $rooms[$i + 1]->price_per_night * 3,
+                'status' => 'completed',
+            ]);
+
+            Payment::create([
+                'reservation_id' => $reservation->id,
+                'user_id' => $client->id,
+                'amount' => $reservation->total_price,
+                'method' => $i % 2 === 0 ? 'stripe' : 'paypal',
+                'status' => 'completed',
+                'transaction_id' => 'demo_' . Str::random(16),
+            ]);
+
+            Review::create([
+                'user_id' => $client->id,
+                'room_id' => $reservation->room_id,
+                'reservation_id' => $reservation->id,
+                'rating' => rand(4, 5),
+                'comment' => collect([
+                    'Amazing stay! The room was spotless and the staff was incredibly friendly.',
+                    'We had a wonderful time. The views from our room were absolutely stunning.',
+                    'Perfect hotel for families. Our kids loved the pool and the breakfast was excellent.',
+                    'Exceeded our expectations! Will definitely be coming back next year.',
+                    'The spa was heavenly and the room service was top-notch. Highly recommended!',
+                ])->random(),
+                'is_approved' => true,
+            ]);
+        }
+
+        // Upcoming confirmed reservations
+        foreach ($clients->slice(2, 2) as $i => $client) {
+            $reservation = Reservation::create([
+                'user_id' => $client->id,
+                'room_id' => $rooms[$i + 3]->id,
+                'check_in' => now()->addDays(3 + $i * 2),
+                'check_out' => now()->addDays(6 + $i * 2),
+                'guests' => rand(1, 3),
+                'total_price' => $rooms[$i + 3]->price_per_night * 3,
                 'status' => 'confirmed',
-                'prix_total' => $total1,
-            ]
-        );
+            ]);
 
-        Payment::updateOrCreate(
-            ['reservation_id' => $res1->id],
-            [
-                'montant' => $total1,
+            Payment::create([
+                'reservation_id' => $reservation->id,
+                'user_id' => $client->id,
+                'amount' => $reservation->total_price,
                 'method' => 'stripe',
-                'status' => 'paid',
-                'transaction_id' => 'STRIPE-SIM-ABC123DEFG',
-            ]
-        );
+                'status' => 'completed',
+                'transaction_id' => 'demo_' . Str::random(16),
+            ]);
+        }
 
         // Pending reservation
-        $room302 = Chambre::where('numero', '302')->firstOrFail();
-        $start2 = now()->addDays(14)->toDateString();
-        $end2 = now()->addDays(18)->toDateString();
-        $total2 = (float) $room302->prix * 4;
-
-        $res2 = Reservation::updateOrCreate(
-            ['user_id' => $client2->id, 'chambre_id' => $room302->id, 'date_debut' => $start2],
-            [
-                'date_fin' => $end2,
-                'nombre_personnes' => 4,
-                'status' => 'pending',
-                'prix_total' => $total2,
-            ]
-        );
-
-        // Confirmed reservation (PayPal)
-        $room202 = Chambre::where('numero', '202')->firstOrFail();
-        $start3 = now()->addDays(3)->toDateString();
-        $end3 = now()->addDays(5)->toDateString();
-        $total3 = (float) $room202->prix * 2;
-
-        $res3 = Reservation::updateOrCreate(
-            ['user_id' => $client->id, 'chambre_id' => $room202->id, 'date_debut' => $start3],
-            [
-                'date_fin' => $end3,
-                'nombre_personnes' => 2,
-                'status' => 'confirmed',
-                'prix_total' => $total3,
-            ]
-        );
-
-        Payment::updateOrCreate(
-            ['reservation_id' => $res3->id],
-            [
-                'montant' => $total3,
-                'method' => 'paypal',
-                'status' => 'paid',
-                'transaction_id' => 'PAYPAL-SIM-XYZ789MNOP',
-            ]
-        );
-
-        // Cancelled reservation
-        $room101 = Chambre::where('numero', '101')->firstOrFail();
-        $start4 = now()->subDays(5)->toDateString();
-        $end4 = now()->subDays(2)->toDateString();
-        $total4 = (float) $room101->prix * 3;
-
-        Reservation::updateOrCreate(
-            ['user_id' => $client2->id, 'chambre_id' => $room101->id, 'date_debut' => $start4],
-            [
-                'date_fin' => $end4,
-                'nombre_personnes' => 1,
-                'status' => 'cancelled',
-                'prix_total' => $total4,
-            ]
-        );
-
-        // Cash payment reservation
-        $room301 = Chambre::where('numero', '301')->firstOrFail();
-        $start5 = now()->addDays(1)->toDateString();
-        $end5 = now()->addDays(4)->toDateString();
-        $total5 = (float) $room301->prix * 3;
-
-        $res5 = Reservation::updateOrCreate(
-            ['user_id' => $client2->id, 'chambre_id' => $room301->id, 'date_debut' => $start5],
-            [
-                'date_fin' => $end5,
-                'nombre_personnes' => 3,
-                'status' => 'confirmed',
-                'prix_total' => $total5,
-            ]
-        );
-
-        Payment::updateOrCreate(
-            ['reservation_id' => $res5->id],
-            [
-                'montant' => $total5,
-                'method' => 'cash',
-                'status' => 'paid',
-                'transaction_id' => 'CASH-SIM-ONSITE001',
-            ]
-        );
+        $pendingRes = Reservation::create([
+            'user_id' => $clients->last()->id,
+            'room_id' => $rooms[0]->id,
+            'check_in' => now()->addDays(7),
+            'check_out' => now()->addDays(10),
+            'guests' => 1,
+            'total_price' => $rooms[0]->price_per_night * 3,
+            'status' => 'pending',
+            'special_requests' => 'Late check-in around 10 PM please.',
+        ]);
     }
 }
